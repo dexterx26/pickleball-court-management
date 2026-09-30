@@ -40,6 +40,23 @@
         <form action="{{ route('register') }}" method="POST" class="space-y-4 text-xs">
             @csrf
 
+            <!-- Account Type Selection -->
+            <div>
+                <label class="block font-semibold text-theme-body mb-2">I am registering as: <span class="text-rose-500">*</span></label>
+                <div class="grid grid-cols-2 gap-2.5">
+                    <label class="relative flex flex-col p-3 rounded-xl border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-900 cursor-pointer hover:border-cyan-500 transition-colors has-[:checked]:border-cyan-500 has-[:checked]:bg-cyan-500/5">
+                        <input type="radio" name="account_type" value="client" {{ old('account_type', 'client') === 'client' ? 'checked' : '' }} class="sr-only">
+                        <span class="font-bold text-theme-heading flex items-center gap-1.5"><i class="fa-solid fa-table-tennis-paddle-ball text-cyan-500"></i> Player</span>
+                        <span class="text-[10px] text-theme-muted mt-1 leading-tight">Book courts across any sports venue</span>
+                    </label>
+                    <label class="relative flex flex-col p-3 rounded-xl border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-900 cursor-pointer hover:border-emerald-500 transition-colors has-[:checked]:border-emerald-500 has-[:checked]:bg-emerald-500/5">
+                        <input type="radio" name="account_type" value="court_owner" {{ old('account_type') === 'court_owner' ? 'checked' : '' }} class="sr-only">
+                        <span class="font-bold text-theme-heading flex items-center gap-1.5"><i class="fa-solid fa-building text-emerald-500"></i> Court Owner</span>
+                        <span class="text-[10px] text-theme-muted mt-1 leading-tight">List my venue, courts & get reservations</span>
+                    </label>
+                </div>
+            </div>
+
             <div>
                 <label class="block font-semibold text-theme-body mb-1">Full Name <span class="text-rose-500">*</span></label>
                 <input type="text" name="name" value="{{ old('name') }}" required autofocus placeholder="e.g. Maria Santos"

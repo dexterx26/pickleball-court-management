@@ -34,10 +34,11 @@ try {
     window.reverbConnected = false;
 }
 
-// Global helper to subscribe to court availability updates
-window.subscribeCourtUpdates = function (callback) {
+// Global helper to subscribe to court availability updates (supports multi-venue channel isolation)
+window.subscribeCourtUpdates = function (callback, venueId = null) {
     if (window.Echo) {
-        window.Echo.channel('courts')
+        const channelName = venueId ? `courts.${venueId}` : 'courts';
+        window.Echo.channel(channelName)
             .listen('.CourtSlotsUpdated', (data) => {
                 if (typeof callback === 'function') {
                     callback(data);

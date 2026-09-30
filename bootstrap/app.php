@@ -15,6 +15,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'role' => \App\Http\Middleware\EnsureUserHasRole::class,
             'module' => \App\Http\Middleware\CheckModuleAccess::class,
+            'venue.owner' => \App\Http\Middleware\EnsureVenueOwnership::class,
         ]);
 
         $middleware->validateCsrfTokens(except: [

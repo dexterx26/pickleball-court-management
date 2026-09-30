@@ -61,6 +61,8 @@ class AuthController extends Controller
         $emailMap = [
             'owner' => 'owner@paddlefield.com',
             'admin' => 'admin@paddlefield.com',
+            'platform' => 'platform@paddlefield.com',
+            'platform_admin' => 'platform@paddlefield.com',
             'assistant' => 'assistant@paddlefield.com',
             'player' => 'player@gmail.com',
             'player2' => 'player2@gmail.com',
@@ -81,6 +83,16 @@ class AuthController extends Controller
 
             Auth::login($user);
             request()->session()->regenerate();
+
+            if ($user->isPlatformAdmin()) {
+                if (\Illuminate\Support\Facades\Route::has('platform.venues')) {
+                    return redirect()->route('platform.venues')->with('success', "Logged in as {$user->name}");
+                }
+                if (\Illuminate\Support\Facades\Route::has('platform.dashboard')) {
+                    return redirect()->route('platform.dashboard')->with('success', "Logged in as {$user->name}");
+                }
+                return redirect()->route('owner.dashboard')->with('success', "Logged in as {$user->name}");
+            }
 
             if ($user->isStaffOrAdmin()) {
                 if ($user->isAdminAssistant()) {
@@ -108,20 +120,29 @@ class AuthController extends Controller
             'email' => 'required|string|email|max:255|unique:users',
             'phone' => 'required|string|max:25',
             'password' => 'required|string|min:8|confirmed',
+            'account_type' => 'nullable|string|in:client,court_owner',
         ]);
+
+        $isOwner = ($request->input('account_type') === 'court_owner');
+        $role = $isOwner ? 'court_owner' : 'client';
 
         $user = User::create([
             'name' => $data['name'],
             'email' => $data['email'],
             'phone' => $data['phone'],
             'password' => Hash::make($data['password']),
-            'role' => 'client', // standard client registration
+            'role' => $role,
         ]);
 
         Auth::login($user);
         $request->session()->regenerate();
 
-        return redirect()->route('home')->with('success', 'Registration successful! Welcome to Paddle Field Sports Center.');
+        if ($isOwner) {
+            return redirect()->route('owner.onboard.step1')
+                ->with('success', 'Account created! Welcome to the court owner portal. Let\'s set up your venue.');
+        }
+
+        return redirect()->route('home')->with('success', 'Registration successful! Welcome to the Pickleball Platform.');
     }
 
     public function logout(Request $request)

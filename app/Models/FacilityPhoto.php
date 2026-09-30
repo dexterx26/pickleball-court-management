@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class FacilityPhoto extends Model
 {
@@ -12,9 +13,15 @@ class FacilityPhoto extends Model
     protected $guarded = ['id'];
 
     protected $casts = [
+        'venue_id' => 'integer',
         'is_featured' => 'boolean',
         'sort_order' => 'integer',
     ];
+
+    public function venue(): BelongsTo
+    {
+        return $this->belongsTo(Venue::class);
+    }
 
     /**
      * Default fallback photos for seeded items or missing files
@@ -37,7 +44,6 @@ class FacilityPhoto extends Model
 
         $cleanPath = preg_replace('/^storage\//', '', ltrim($this->image_path, '/'));
 
-        // Check if the file exists locally in public/storage or storage/app/public
         $existsLocally = file_exists(public_path('storage/' . $cleanPath)) || 
                          file_exists(storage_path('app/public/' . $cleanPath));
 

@@ -4,6 +4,9 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Court extends Model
@@ -17,16 +20,62 @@ class Court extends Model
         'max_players' => 'integer',
         'court_number' => 'integer',
         'is_active' => 'boolean',
+        'venue_id' => 'integer',
     ];
 
-    public function bookings()
+    public function venue(): BelongsTo
+    {
+        return $this->belongsTo(Venue::class);
+    }
+
+    public function bookings(): HasMany
     {
         return $this->hasMany(Booking::class);
     }
 
-    public function slots()
+    public function slots(): HasMany
     {
         return $this->hasMany(BookingSlot::class);
+    }
+
+    public function subscriptions(): HasMany
+    {
+        return $this->hasMany(CourtSubscription::class);
+    }
+
+    public function activeSubscription(): HasOne
+    {
+        return $this->hasOne(CourtSubscription::class)->latestOfMany();
+    }
+
+    /**
+     * Check if court is bookable based on active status and subscription
+     */
+    public function isBookable(): bool
+    {
+        if (!$this->is_active) {
+            return false;
+        }
+
+        $sub = $this->activeSubscription;
+        // If court has no subscription record yet, default to bookable (backwards-compatible)
+        if (!$sub) {
+            return true;
+        }
+
+        if ($sub->isInTrial()) {
+            return true;
+        }
+
+        if ($sub->isActive()) {
+            return true;
+        }
+
+        if ($sub->isInGracePeriod()) {
+            return true;
+        }
+
+        return false;
     }
 
     public function getFormattedPriceAttribute(): string

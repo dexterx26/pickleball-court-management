@@ -41,7 +41,15 @@ class BookingApiController extends Controller
             $date = Carbon::today()->format('Y-m-d');
         }
 
-        $availability = $this->bookingService->getAvailability($date);
+        $venueId = $request->query('venue_id');
+        if ($request->route('slug')) {
+            $venue = \App\Models\Venue::where('slug', $request->route('slug'))->first();
+            if ($venue) {
+                $venueId = $venue->id;
+            }
+        }
+
+        $availability = $this->bookingService->getAvailability($date, $venueId ? (int) $venueId : null);
 
         return response()->json([
             'success' => true,
@@ -81,7 +89,8 @@ class BookingApiController extends Controller
         ];
 
         $userId = Auth::id();
-        $settings = VenueSetting::getSettings();
+        $court = Court::find($courtId);
+        $settings = $court ? VenueSetting::forVenue($court->venue_id) : VenueSetting::getSettings();
         $isPayMongo = $settings->payment_mode === 'paymongo';
 
         try {

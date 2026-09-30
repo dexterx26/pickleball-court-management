@@ -84,8 +84,39 @@
     </div>
 </section>
 
+<!-- Multi-Venue Network Discovery Banner -->
+<section class="py-6 bg-gradient-to-r from-amber-500/10 via-cyan-500/10 to-teal-500/10 border-y border-stone-200 dark:border-stone-800">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="p-6 md:p-8 rounded-3xl glass-card border border-cyan-500/20 shadow-xl flex flex-col md:flex-row items-center justify-between gap-6">
+            <div class="flex items-center gap-5">
+                <div class="w-14 h-14 rounded-2xl bg-cyan-500/20 text-cyan-600 dark:text-cyan-400 flex items-center justify-center text-2xl border border-cyan-500/30 shrink-0">
+                    <i class="fa-solid fa-earth-americas"></i>
+                </div>
+                <div>
+                    <div class="flex items-center gap-2 mb-1">
+                        <span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-cyan-500/20 text-cyan-700 dark:text-cyan-300 border border-cyan-500/30">Multi-Venue Network</span>
+                        <span class="text-xs text-theme-muted font-medium">Multiple Sports Centers & Arenas</span>
+                    </div>
+                    <h3 class="text-xl md:text-2xl font-black text-theme-heading">Looking for courts across different locations?</h3>
+                    <p class="text-xs md:text-sm text-theme-body mt-0.5">Explore our nationwide pickleball arena network, find facilities near your GPS coordinates, or list your own venue with a 14-day free trial.</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-3 shrink-0 w-full md:w-auto">
+                <a href="{{ route('venues.index') }}" class="flex-1 md:flex-none px-5 py-3 rounded-2xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs shadow-lg shadow-cyan-500/25 transition-transform hover:scale-105 flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-location-crosshairs"></i>
+                    <span>Find Venues Near Me</span>
+                </a>
+                <a href="{{ route('register') }}" class="flex-1 md:flex-none px-5 py-3 rounded-2xl bg-stone-200 dark:bg-stone-800 hover:bg-stone-300 dark:hover:bg-stone-700 text-theme-heading font-bold text-xs border border-stone-300 dark:border-stone-700 transition-colors flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-store text-amber-500"></i>
+                    <span>List Your Venue</span>
+                </a>
+            </div>
+        </div>
+    </div>
+</section>
+
 <!-- REAL-TIME INTERACTIVE BOOKING ENGINE -->
-<section id="booking-engine" class="py-16 bg-stone-100/70 dark:bg-stone-900/40 border-y border-stone-200 dark:border-stone-800 relative">
+<section id="booking-engine" class="py-16 bg-stone-100/70 dark:bg-stone-900/40 border-b border-stone-200 dark:border-stone-800 relative">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <!-- Section Header -->
         <div class="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-10">

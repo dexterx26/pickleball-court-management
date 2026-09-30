@@ -23,6 +23,7 @@ class User extends Authenticatable
         'email',
         'role',
         'court_owner_id',
+        'venue_id',
         'permissions',
         'is_active',
         'phone',
@@ -92,9 +93,24 @@ class User extends Authenticatable
         ];
     }
 
+    public function venue()
+    {
+        return $this->belongsTo(Venue::class);
+    }
+
+    public function ownedVenues()
+    {
+        return $this->hasMany(Venue::class, 'owner_id');
+    }
+
+    public function isPlatformAdmin(): bool
+    {
+        return in_array($this->role, ['platform_admin', 'admin']);
+    }
+
     public function isAdmin(): bool
     {
-        return $this->role === 'admin';
+        return $this->isPlatformAdmin();
     }
 
     public function isOwner(): bool
@@ -109,17 +125,17 @@ class User extends Authenticatable
 
     public function isClient(): bool
     {
-        return $this->role === 'client';
+        return in_array($this->role, ['client', 'user']);
     }
 
     public function isStaffOrAdmin(): bool
     {
-        return in_array($this->role, ['admin', 'court_owner', 'admin_assistant']);
+        return in_array($this->role, ['platform_admin', 'admin', 'court_owner', 'admin_assistant']);
     }
 
     public function canManageStaff(): bool
     {
-        return in_array($this->role, ['admin', 'court_owner']);
+        return in_array($this->role, ['platform_admin', 'admin', 'court_owner']);
     }
 
     /**
@@ -158,6 +174,10 @@ class User extends Authenticatable
      */
     public function getFirstAllowedRoute(): string
     {
+        if ($this->isPlatformAdmin()) {
+            return 'platform.venues';
+        }
+
         if ($this->hasModuleAccess('schedule')) {
             return 'owner.dashboard';
         }

@@ -5,6 +5,8 @@ namespace App\Models;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Booking extends Model
 {
@@ -13,6 +15,7 @@ class Booking extends Model
     protected $guarded = ['id'];
 
     protected $casts = [
+        'venue_id' => 'integer',
         'booking_date' => 'date',
         'held_until' => 'datetime',
         'receipt_uploaded_at' => 'datetime',
@@ -23,22 +26,27 @@ class Booking extends Model
         'players_count' => 'integer',
     ];
 
-    public function court()
+    public function venue(): BelongsTo
+    {
+        return $this->belongsTo(Venue::class);
+    }
+
+    public function court(): BelongsTo
     {
         return $this->belongsTo(Court::class)->withTrashed();
     }
 
-    public function user()
+    public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
     }
 
-    public function approver()
+    public function approver(): BelongsTo
     {
         return $this->belongsTo(User::class, 'approved_by');
     }
 
-    public function slots()
+    public function slots(): HasMany
     {
         return $this->hasMany(BookingSlot::class);
     }

@@ -58,6 +58,9 @@
 
                 <!-- Desktop Nav Links -->
                 <nav class="hidden md:flex items-center gap-7 text-sm font-semibold text-theme-body">
+                    <a href="{{ route('venues.index') }}" class="hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors flex items-center gap-1.5 font-bold text-cyan-600 dark:text-cyan-400">
+                        <i class="fa-solid fa-location-dot text-xs text-amber-500"></i> Browse Venues
+                    </a>
                     <a href="{{ route('home') }}#booking-engine" class="hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors flex items-center gap-1.5">
                         <i class="fa-solid fa-calendar-check text-xs text-cyan-600 dark:text-cyan-400"></i> Reserve Court
                     </a>
@@ -90,6 +93,13 @@
                         </button>
                         <div class="absolute right-0 mt-2 w-56 py-2 glass-dropdown rounded-2xl shadow-2xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
                             <div class="px-3 py-1 text-[11px] font-bold text-theme-muted uppercase tracking-wider">Quick Switch Demo</div>
+                            <a href="{{ route('quick.login', 'platform_admin') }}" class="flex items-center gap-2.5 px-3 py-2 text-xs text-theme-heading hover:bg-purple-500/10 hover:text-purple-600 dark:hover:text-purple-400 transition-colors">
+                                <span class="w-2 h-2 rounded-full bg-purple-500"></span>
+                                <div>
+                                    <div class="font-bold">Platform Superadmin</div>
+                                    <div class="text-[10px] text-theme-muted">Manage all venues & subscriptions</div>
+                                </div>
+                            </a>
                             <a href="{{ route('quick.login', 'owner') }}" class="flex items-center gap-2.5 px-3 py-2 text-xs text-theme-heading hover:bg-cyan-500/10 hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors">
                                 <span class="w-2 h-2 rounded-full bg-cyan-500"></span>
                                 <div>
@@ -125,7 +135,7 @@
                         @if(Auth::user()->isStaffOrAdmin())
                             <a href="{{ route(Auth::user()->getFirstAllowedRoute()) }}" class="px-4 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 text-xs font-bold shadow-md shadow-cyan-500/20 flex items-center gap-2 transition-all">
                                 <i class="fa-solid fa-gauge-high"></i>
-                                <span>{{ Auth::user()->isAdminAssistant() ? 'Staff Hub' : 'Owner Hub' }}</span>
+                                <span>{{ Auth::user()->isPlatformAdmin() ? 'Platform Admin' : (Auth::user()->isAdminAssistant() ? 'Staff Hub' : 'Owner Hub') }}</span>
                             </a>
                         @else
                             <div class="flex items-center gap-2">
@@ -215,11 +225,13 @@
                 <div>
                     <h4 class="text-sm font-bold text-theme-heading mb-4 uppercase tracking-wider">Quick Navigation</h4>
                     <ul class="space-y-2 text-xs text-theme-muted">
+                        <li><a href="{{ route('venues.index') }}" class="hover:text-cyan-600 transition-colors font-semibold text-cyan-600 dark:text-cyan-400"><i class="fa-solid fa-location-dot mr-1"></i> Browse All Venues</a></li>
                         <li><a href="{{ route('home') }}#booking-engine" class="hover:text-cyan-600 transition-colors">Book a Court</a></li>
                         <li><a href="{{ route('home') }}#courts-section" class="hover:text-cyan-600 transition-colors">Courts & Pricing</a></li>
                         <li><a href="{{ route('home') }}#gallery-section" class="hover:text-cyan-600 transition-colors">Facility Photos</a></li>
                         <li><button type="button" onclick="openLookupModal()" class="hover:text-cyan-600 transition-colors cursor-pointer">Search My Booking</button></li>
                         <li><a href="{{ route('owner.dashboard') }}" class="hover:text-cyan-600 transition-colors">Owner & Admin Portal</a></li>
+                        <li><a href="{{ route('register') }}" class="hover:text-amber-500 transition-colors text-amber-600 dark:text-amber-400 font-semibold"><i class="fa-solid fa-store mr-1"></i> List Your Venue</a></li>
                     </ul>
                 </div>
 

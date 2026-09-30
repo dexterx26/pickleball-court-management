@@ -4,8 +4,12 @@ namespace App\Http\Controllers;
 
 use App\Models\Booking;
 use App\Models\Court;
+use App\Models\CourtSubscription;
 use App\Models\FacilityPhoto;
+use App\Models\PlatformSetting;
+use App\Models\SubscriptionInvoice;
 use App\Models\User;
+use App\Models\Venue;
 use App\Models\VenueSetting;
 use App\Services\BookingService;
 use Carbon\Carbon;
@@ -24,25 +28,67 @@ class OwnerController extends Controller
     }
 
     /**
+     * Resolve the current venue for the active request
+     */
+    protected function getCurrentVenue(?Request $request = null): Venue
+    {
+        $req = $request ?: request();
+        $venue = $req->attributes->get('currentVenue');
+        if ($venue) {
+            return $venue;
+        }
+
+        $user = Auth::user();
+        if ($user) {
+            if ($user->venue) {
+                return $user->venue;
+            }
+            if ($user->isOwner()) {
+                $owned = $user->ownedVenues()->first();
+                if ($owned) {
+                    return $owned;
+                }
+            }
+            if ($user->venue_id) {
+                $v = Venue::find($user->venue_id);
+                if ($v) {
+                    return $v;
+                }
+            }
+        }
+
+        return Venue::first() ?? Venue::create([
+            'name' => 'Paddle Field Sports Center',
+            'slug' => 'paddle-field-sports-center',
+            'prefix' => 'PF',
+            'is_active' => true,
+            'status' => 'approved',
+        ]);
+    }
+
+    /**
      * Dashboard Overview
      */
     public function dashboard(Request $request)
     {
-        $settings = VenueSetting::getSettings();
+        $venue = $this->getCurrentVenue($request);
+        $settings = VenueSetting::forVenue($venue->id);
         $this->bookingService->releaseExpiredHolds();
 
         $today = Carbon::today()->format('Y-m-d');
-        $courts = Court::where('is_active', true)->orderBy('court_number')->get();
+        $courts = Court::where('venue_id', $venue->id)->where('is_active', true)->orderBy('court_number')->get();
         $selectedCourtId = $request->input('court_id');
 
-        $pendingApprovals = Booking::with('court')
+        $pendingApprovals = Booking::where('venue_id', $venue->id)
+            ->with('court')
             ->where('booking_status', 'pending_approval')
             ->orderBy('created_at', 'asc')
             ->get();
 
         $nowTime = Carbon::now()->format('H:i');
 
-        $todayBookings = Booking::with(['court', 'approver', 'slots'])
+        $todayBookings = Booking::where('venue_id', $venue->id)
+            ->with(['court', 'approver', 'slots'])
             ->whereDate('booking_date', $today)
             ->whereIn('booking_status', ['confirmed', 'pending_approval', 'held'])
             ->get()
@@ -71,11 +117,12 @@ class OwnerController extends Controller
                 return ($a->court?->court_number ?? 0) <=> ($b->court?->court_number ?? 0);
             })->values();
 
-        $totalRevenue = Booking::where('booking_status', 'confirmed')->sum('total_amount');
-        $totalConfirmedCount = Booking::where('booking_status', 'confirmed')->count();
+        $totalRevenue = Booking::where('venue_id', $venue->id)->where('booking_status', 'confirmed')->sum('total_amount');
+        $totalConfirmedCount = Booking::where('venue_id', $venue->id)->where('booking_status', 'confirmed')->count();
         $totalCourtsCount = $courts->count();
 
-        $recentBookings = Booking::with(['court', 'approver', 'slots'])
+        $recentBookings = Booking::where('venue_id', $venue->id)
+            ->with(['court', 'approver', 'slots'])
             ->orderBy('id', 'desc')
             ->limit(8)
             ->get();
@@ -98,8 +145,10 @@ class OwnerController extends Controller
      */
     public function approvals()
     {
-        $settings = VenueSetting::getSettings();
-        $pendingBookings = Booking::with(['court', 'slots'])
+        $venue = $this->getCurrentVenue();
+        $settings = VenueSetting::forVenue($venue->id);
+        $pendingBookings = Booking::where('venue_id', $venue->id)
+            ->with(['court', 'slots'])
             ->where('booking_status', 'pending_approval')
             ->orderBy('created_at', 'asc')
             ->paginate(15);
@@ -112,7 +161,8 @@ class OwnerController extends Controller
      */
     public function approveBooking(int $id)
     {
-        $booking = Booking::with('court')->findOrFail($id);
+        $venue = $this->getCurrentVenue();
+        $booking = Booking::where('venue_id', $venue->id)->with('court')->findOrFail($id);
 
         if ($booking->booking_status !== 'pending_approval') {
             return back()->with('error', "Booking {$booking->booking_reference} is not pending approval.");
@@ -128,7 +178,8 @@ class OwnerController extends Controller
      */
     public function rejectBooking(Request $request, int $id)
     {
-        $booking = Booking::with('court')->findOrFail($id);
+        $venue = $this->getCurrentVenue($request);
+        $booking = Booking::where('venue_id', $venue->id)->with('court')->findOrFail($id);
 
         if ($booking->booking_status !== 'pending_approval') {
             return back()->with('error', "Booking {$booking->booking_reference} is not pending approval.");
@@ -146,8 +197,13 @@ class OwnerController extends Controller
      */
     public function courts()
     {
-        $settings = VenueSetting::getSettings();
-        $courts = Court::withTrashed()->withCount(['bookings as total_bookings'])->orderBy('court_number')->get();
+        $venue = $this->getCurrentVenue();
+        $settings = VenueSetting::forVenue($venue->id);
+        $courts = Court::where('venue_id', $venue->id)
+            ->withTrashed()
+            ->withCount(['bookings as total_bookings'])
+            ->orderBy('court_number')
+            ->get();
 
         return view('owner.courts.index', compact('settings', 'courts'));
     }
@@ -157,6 +213,8 @@ class OwnerController extends Controller
      */
     public function storeCourt(Request $request)
     {
+        $venue = $this->getCurrentVenue($request);
+
         if ($request->hasFile('image')) {
             $file = $request->file('image');
             if (!$file->isValid()) {
@@ -204,6 +262,7 @@ class OwnerController extends Controller
         }
 
         Court::create([
+            'venue_id' => $venue->id,
             'name' => $data['name'],
             'court_number' => $data['court_number'],
             'description' => $data['description'] ?? null,
@@ -229,7 +288,8 @@ class OwnerController extends Controller
      */
     public function updateCourt(Request $request, int $id)
     {
-        $court = Court::withTrashed()->findOrFail($id);
+        $venue = $this->getCurrentVenue($request);
+        $court = Court::withTrashed()->where('venue_id', $venue->id)->findOrFail($id);
 
         if ($request->hasFile('image')) {
             $file = $request->file('image');
@@ -310,9 +370,10 @@ class OwnerController extends Controller
      */
     public function destroyCourt(int $id)
     {
-        $court = Court::findOrFail($id);
+        $venue = $this->getCurrentVenue();
+        $court = Court::where('venue_id', $venue->id)->findOrFail($id);
         $court->update(['is_active' => false]);
-        $court->delete(); // Soft delete: sets deleted_at, hides from schedule while keeping bookings & earnings computation intact
+        $court->delete();
 
         return back()->with('success', "{$court->name} has been archived. It is now hidden from the public schedule, while past reservations and total earnings are safely preserved.");
     }
@@ -322,7 +383,8 @@ class OwnerController extends Controller
      */
     public function restoreCourt(int $id)
     {
-        $court = Court::withTrashed()->findOrFail($id);
+        $venue = $this->getCurrentVenue();
+        $court = Court::withTrashed()->where('venue_id', $venue->id)->findOrFail($id);
         $court->restore();
         $court->update(['is_active' => true]);
 
@@ -334,8 +396,9 @@ class OwnerController extends Controller
      */
     public function photos()
     {
-        $settings = VenueSetting::getSettings();
-        $photos = FacilityPhoto::orderBy('sort_order')->orderBy('id', 'desc')->get();
+        $venue = $this->getCurrentVenue();
+        $settings = VenueSetting::forVenue($venue->id);
+        $photos = FacilityPhoto::where('venue_id', $venue->id)->orderBy('sort_order')->orderBy('id', 'desc')->get();
 
         return view('owner.photos.index', compact('settings', 'photos'));
     }
@@ -396,8 +459,10 @@ class OwnerController extends Controller
 
         $sortOrder = (int) ($request->input('sort_order') ?: 0);
         $isFeatured = $request->has('is_featured');
+        $venue = $this->getCurrentVenue($request);
 
         FacilityPhoto::create([
+            'venue_id' => $venue->id,
             'title' => trim($request->input('title')),
             'category' => $request->input('category'),
             'image_path' => $imagePath,
@@ -415,7 +480,8 @@ class OwnerController extends Controller
      */
     public function updatePhoto(Request $request, int $id)
     {
-        $photo = FacilityPhoto::findOrFail($id);
+        $venue = $this->getCurrentVenue($request);
+        $photo = FacilityPhoto::where('venue_id', $venue->id)->findOrFail($id);
 
         if ($request->hasFile('photo')) {
             $file = $request->file('photo');
@@ -484,7 +550,8 @@ class OwnerController extends Controller
      */
     public function destroyPhoto(int $id)
     {
-        $photo = FacilityPhoto::findOrFail($id);
+        $venue = $this->getCurrentVenue();
+        $photo = FacilityPhoto::where('venue_id', $venue->id)->findOrFail($id);
 
         if ($photo->image_path) {
             if (Storage::disk('public')->exists($photo->image_path)) {
@@ -505,7 +572,8 @@ class OwnerController extends Controller
      */
     public function settings()
     {
-        $settings = VenueSetting::getSettings();
+        $venue = $this->getCurrentVenue();
+        $settings = VenueSetting::forVenue($venue->id);
         return view('owner.settings', compact('settings'));
     }
 
@@ -514,6 +582,7 @@ class OwnerController extends Controller
      */
     public function updateSettings(Request $request)
     {
+        $venue = $this->getCurrentVenue($request);
         $request->validate([
             'venue_name' => 'required|string|max:150',
             'tagline' => 'nullable|string|max:255',
@@ -545,7 +614,7 @@ class OwnerController extends Controller
             'manual_payment_qr' => 'nullable|image|mimes:jpeg,png,jpg,webp|max:4096',
         ]);
 
-        $settings = VenueSetting::getSettings();
+        $settings = VenueSetting::forVenue($venue->id);
 
         $data = $request->except(['_token', 'manual_payment_qr']);
         $data['xendit_simulation_mode'] = $request->boolean('xendit_simulation_mode', false);
@@ -566,8 +635,9 @@ class OwnerController extends Controller
      */
     public function allBookings(Request $request)
     {
-        $settings = VenueSetting::getSettings();
-        $courts = Court::orderBy('court_number')->get();
+        $venue = $this->getCurrentVenue($request);
+        $settings = VenueSetting::forVenue($venue->id);
+        $courts = Court::where('venue_id', $venue->id)->orderBy('court_number')->get();
 
         $allowedStatuses = ['confirmed', 'pending_approval', 'held', 'cancelled', 'rejected', 'expired'];
 
@@ -579,7 +649,10 @@ class OwnerController extends Controller
             $status = 'confirmed';
         }
 
-        $query = Booking::with(['court', 'approver'])->orderBy('booking_date', 'desc')->orderBy('start_time', 'desc');
+        $query = Booking::where('venue_id', $venue->id)
+            ->with(['court', 'approver'])
+            ->orderBy('booking_date', 'desc')
+            ->orderBy('start_time', 'desc');
 
         if ($request->filled('court_id')) {
             $query->where('court_id', $request->input('court_id'));
@@ -606,13 +679,13 @@ class OwnerController extends Controller
         $bookings = $query->paginate(20)->withQueryString();
 
         $statusCounts = [
-            'all' => Booking::count(),
-            'confirmed' => Booking::where('booking_status', 'confirmed')->count(),
-            'pending_approval' => Booking::where('booking_status', 'pending_approval')->count(),
-            'held' => Booking::where('booking_status', 'held')->count(),
-            'cancelled' => Booking::where('booking_status', 'cancelled')->count(),
-            'rejected' => Booking::where('booking_status', 'rejected')->count(),
-            'expired' => Booking::where('booking_status', 'expired')->count(),
+            'all' => Booking::where('venue_id', $venue->id)->count(),
+            'confirmed' => Booking::where('venue_id', $venue->id)->where('booking_status', 'confirmed')->count(),
+            'pending_approval' => Booking::where('venue_id', $venue->id)->where('booking_status', 'pending_approval')->count(),
+            'held' => Booking::where('venue_id', $venue->id)->where('booking_status', 'held')->count(),
+            'cancelled' => Booking::where('venue_id', $venue->id)->where('booking_status', 'cancelled')->count(),
+            'rejected' => Booking::where('venue_id', $venue->id)->where('booking_status', 'rejected')->count(),
+            'expired' => Booking::where('venue_id', $venue->id)->where('booking_status', 'expired')->count(),
         ];
 
         return view('owner.bookings.index', compact('settings', 'courts', 'bookings', 'status', 'statusCounts'));
@@ -623,6 +696,7 @@ class OwnerController extends Controller
      */
     public function manualReserve(Request $request)
     {
+        $venue = $this->getCurrentVenue($request);
         $data = $request->validate([
             'court_id' => 'required|exists:courts,id',
             'date' => 'required|date',
@@ -637,7 +711,7 @@ class OwnerController extends Controller
             'notes' => 'nullable|string|max:500',
         ]);
 
-        $court = Court::findOrFail($data['court_id']);
+        $court = Court::where('venue_id', $venue->id)->findOrFail($data['court_id']);
 
         if ($data['slot_mode'] === 'all_day') {
             $slots = [];
@@ -654,7 +728,7 @@ class OwnerController extends Controller
         }
 
         try {
-            $booking = $this->bookingService->manualReserveCourt($data, Auth::id());
+            $booking = $this->bookingService->manualReserveCourt($data, Auth::id(), $venue->id);
 
             return back()->with('success', "Court {$court->name} reserved successfully for {$booking->customer_name} ({$booking->booking_reference}) on {$booking->booking_date->format('M d, Y')} from " . date('g:i A', strtotime($booking->start_time)) . " to " . date('g:i A', strtotime($booking->end_time)) . "!");
         } catch (\Exception $e) {
@@ -667,7 +741,8 @@ class OwnerController extends Controller
      */
     public function cancelBooking(Request $request, int $id)
     {
-        $booking = Booking::with('court')->findOrFail($id);
+        $venue = $this->getCurrentVenue($request);
+        $booking = Booking::where('venue_id', $venue->id)->with('court')->findOrFail($id);
 
         if ($booking->booking_status === 'cancelled') {
             return back()->with('error', "Booking {$booking->booking_reference} is already cancelled.");
@@ -1199,5 +1274,73 @@ class OwnerController extends Controller
             'held_bookings_count' => $user->held_bookings_count,
             'bookings' => $heldBookings,
         ]);
+    }
+
+    /**
+     * Court Owner Court Subscriptions Portal
+     * GET /owner/subscriptions
+     */
+    public function subscriptions(Request $request)
+    {
+        $venue = $this->getCurrentVenue($request);
+        $settings = VenueSetting::forVenue($venue->id);
+        $platformSettings = PlatformSetting::getSettings();
+
+        $courts = Court::where('venue_id', $venue->id)
+            ->with(['subscriptions' => function ($q) {
+                $q->orderByDesc('id');
+            }])
+            ->orderBy('court_number')
+            ->get();
+
+        return view('owner.subscriptions', compact('venue', 'settings', 'platformSettings', 'courts'));
+    }
+
+    /**
+     * Renew Court Subscription (Monthly or Annual)
+     * POST /owner/subscriptions/{courtId}/renew
+     */
+    public function renewSubscription(Request $request, int $courtId)
+    {
+        $venue = $this->getCurrentVenue($request);
+        $court = Court::where('venue_id', $venue->id)->findOrFail($courtId);
+        $plan = $request->input('plan', 'monthly');
+
+        $platformSettings = PlatformSetting::getSettings();
+        $price = $plan === 'annual'
+            ? $platformSettings->annual_price_per_court
+            : $platformSettings->monthly_price_per_court;
+
+        $startDate = now();
+        $currentSub = $court->activeSubscription;
+        if ($currentSub && $currentSub->ends_at && $currentSub->ends_at->isFuture()) {
+            $startDate = $currentSub->ends_at;
+        }
+
+        $endDate = $plan === 'annual' ? $startDate->copy()->addYear() : $startDate->copy()->addMonth();
+
+        $subscription = CourtSubscription::create([
+            'venue_id' => $venue->id,
+            'court_id' => $court->id,
+            'plan' => $plan,
+            'price' => $price,
+            'status' => 'active',
+            'starts_at' => $startDate,
+            'ends_at' => $endDate,
+        ]);
+
+        SubscriptionInvoice::create([
+            'subscription_id' => $subscription->id,
+            'owner_id' => $venue->owner_id,
+            'court_id' => $court->id,
+            'invoice_number' => 'INV-' . strtoupper(uniqid()),
+            'amount' => $price,
+            'billing_cycle' => $plan,
+            'status' => 'paid',
+            'paid_at' => now(),
+            'payment_method' => 'card_or_gcash',
+        ]);
+
+        return back()->with('success', "Subscription for {$court->name} renewed successfully ({$plan} plan until {$endDate->format('M d, Y')})!");
     }
 }

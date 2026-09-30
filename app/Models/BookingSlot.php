@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class BookingSlot extends Model
 {
@@ -12,17 +13,23 @@ class BookingSlot extends Model
     protected $guarded = ['id'];
 
     protected $casts = [
+        'venue_id' => 'integer',
         'date' => 'date',
         'rate_per_hour' => 'decimal:2',
         'held_until' => 'datetime',
     ];
 
-    public function booking()
+    public function venue(): BelongsTo
+    {
+        return $this->belongsTo(Venue::class);
+    }
+
+    public function booking(): BelongsTo
     {
         return $this->belongsTo(Booking::class);
     }
 
-    public function court()
+    public function court(): BelongsTo
     {
         return $this->belongsTo(Court::class)->withTrashed();
     }

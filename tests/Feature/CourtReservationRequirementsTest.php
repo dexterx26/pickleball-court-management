@@ -50,7 +50,7 @@ class CourtReservationRequirementsTest extends TestCase
      */
     public function test_courts_are_three_indoor_at_150_rate(): void
     {
-        $courts = Court::where('is_active', true)->get();
+        $courts = Court::where('venue_id', 1)->where('is_active', true)->get();
 
         $this->assertCount(3, $courts);
         foreach ($courts as $court) {
@@ -716,7 +716,7 @@ class CourtReservationRequirementsTest extends TestCase
     public function test_owner_dashboard_today_court_filter_and_descending_past_at_bottom(): void
     {
         $owner = \App\Models\User::where('role', 'court_owner')->first();
-        $courts = Court::where('is_active', true)->orderBy('court_number')->get();
+        $courts = Court::where('venue_id', $owner->venue_id ?? 1)->where('is_active', true)->orderBy('court_number')->get();
         $court1 = $courts[0];
         $court2 = $courts[1];
 

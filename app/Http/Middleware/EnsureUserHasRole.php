@@ -21,8 +21,8 @@ class EnsureUserHasRole
 
         $userRole = $request->user()->role;
 
-        // Admin can access everything
-        if ($userRole === 'admin') {
+        // Platform Admin can access everything
+        if ($request->user()->isPlatformAdmin()) {
             return $next($request);
         }
 

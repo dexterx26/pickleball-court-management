@@ -18,6 +18,7 @@ class CourtSlotsUpdated implements ShouldBroadcastNow
     public string $status; // 'held', 'confirmed', 'released', 'pending_approval'
     public ?int $heldUntilTimestamp;
     public string $message;
+    public ?int $venueId;
 
     /**
      * Create a new event instance.
@@ -28,7 +29,8 @@ class CourtSlotsUpdated implements ShouldBroadcastNow
         array $slots,
         string $status,
         ?int $heldUntilTimestamp = null,
-        string $message = 'Court availability changed'
+        string $message = 'Court availability changed',
+        ?int $venueId = null
     ) {
         $this->date = $date;
         $this->courtId = $courtId;
@@ -36,6 +38,7 @@ class CourtSlotsUpdated implements ShouldBroadcastNow
         $this->status = $status;
         $this->heldUntilTimestamp = $heldUntilTimestamp;
         $this->message = $message;
+        $this->venueId = $venueId;
     }
 
     /**
@@ -45,10 +48,16 @@ class CourtSlotsUpdated implements ShouldBroadcastNow
      */
     public function broadcastOn(): array
     {
-        return [
+        $channels = [
             new Channel('courts'),
             new Channel('courts.' . $this->date),
         ];
+
+        if ($this->venueId) {
+            $channels[] = new Channel('courts.' . $this->venueId);
+        }
+
+        return $channels;
     }
 
     public function broadcastAs(): string

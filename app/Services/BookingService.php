@@ -6,6 +6,7 @@ use App\Events\CourtSlotsUpdated;
 use App\Models\Booking;
 use App\Models\BookingSlot;
 use App\Models\Court;
+use App\Models\Venue;
 use App\Models\VenueSetting;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -68,7 +69,8 @@ class BookingService
                     $slotTimes,
                     'released',
                     null,
-                    "Held timeslots on Court {$courtId} expired and are now available."
+                    "Held timeslots on Court {$courtId} expired and are now available.",
+                    $booking->venue_id
                 ));
             } catch (\Exception $e) {
                 Log::warning('Reverb broadcast error on releaseExpiredHolds: ' . $e->getMessage());
@@ -96,7 +98,8 @@ class BookingService
                         $slotTimes,
                         'released',
                         null,
-                        "Held timeslots on Court {$first->court_id} expired and are now available."
+                        "Held timeslots on Court {$first->court_id} expired and are now available.",
+                        $first->venue_id
                     ));
                 } catch (\Exception $e) {}
             }
@@ -106,18 +109,27 @@ class BookingService
     }
 
     /**
-     * Get availability map for all active courts on a given date
+     * Get availability map for all active courts on a given date (optionally scoped to venue)
      */
-    public function getAvailability(string $date): array
+    public function getAvailability(string $date, ?int $venueId = null): array
     {
         $this->releaseExpiredHolds();
 
-        $settings = VenueSetting::getSettings();
-        $courts = Court::where('is_active', true)->orderBy('court_number')->get();
+        $settings = $venueId ? VenueSetting::forVenue($venueId) : VenueSetting::getSettings();
+        $courtsQuery = Court::where('is_active', true);
+        if ($venueId) {
+            $courtsQuery->where('venue_id', $venueId);
+        }
+        $courts = $courtsQuery->orderBy('court_number')->get();
 
         // Fetch all non-released slots for this date
-        $occupiedSlots = BookingSlot::whereDate('date', $date)
-            ->whereIn('status', ['held', 'pending_approval', 'confirmed'])
+        $occupiedQuery = BookingSlot::whereDate('date', $date)
+            ->whereIn('status', ['held', 'pending_approval', 'confirmed']);
+        if ($venueId) {
+            $occupiedQuery->where('venue_id', $venueId);
+        }
+
+        $occupiedSlots = $occupiedQuery
             ->with(['booking' => function ($q) {
                 $q->select('id', 'booking_reference', 'customer_name', 'customer_phone', 'booking_status', 'held_until');
             }])
@@ -236,7 +248,7 @@ class BookingService
     /**
      * Hold slots for 2 minutes (Xendit flow)
      */
-    public function holdSlots(int $courtId, string $date, array $slots, array $customerData, ?int $userId = null): array
+    public function holdSlots(int $courtId, string $date, array $slots, array $customerData, ?int $userId = null, ?int $venueId = null): array
     {
         $this->releaseExpiredHolds();
 
@@ -245,7 +257,15 @@ class BookingService
         }
 
         $court = Court::findOrFail($courtId);
-        $settings = VenueSetting::getSettings();
+        if (!$court->isBookable()) {
+            throw new \Exception('This court is currently unavailable for booking due to inactive subscription.');
+        }
+
+        $targetVenueId = $venueId ?: ($court->venue_id ?: 1);
+        $venue = Venue::find($targetVenueId);
+        $prefix = $venue->booking_ref_prefix ?? 'PF';
+
+        $settings = VenueSetting::forVenue($targetVenueId);
         $holdingSeconds = $settings->holding_duration_seconds ?: 120; // 2 minutes
         $heldUntil = now()->addSeconds($holdingSeconds);
 
@@ -260,14 +280,15 @@ class BookingService
         $ratePerHour = $court->price_per_hour;
         $totalAmount = $ratePerHour * $totalHours;
 
-        $reference = 'PF-' . date('Ymd') . '-' . strtoupper(Str::random(5));
+        $reference = $prefix . '-' . date('Ymd') . '-' . strtoupper(Str::random(5));
 
         return DB::transaction(function () use (
             $reference, $userId, $customerData, $court, $date,
             $startTime, $endTime, $totalHours, $ratePerHour, $totalAmount,
-            $slots, $heldUntil, $holdingSeconds
+            $slots, $heldUntil, $holdingSeconds, $targetVenueId
         ) {
             $booking = Booking::create([
+                'venue_id' => $targetVenueId,
                 'booking_reference' => $reference,
                 'user_id' => $userId,
                 'customer_name' => $customerData['name'],
@@ -290,6 +311,7 @@ class BookingService
 
             foreach ($slots as $time) {
                 BookingSlot::create([
+                    'venue_id' => $targetVenueId,
                     'booking_id' => $booking->id,
                     'court_id' => $court->id,
                     'date' => $date,
@@ -309,7 +331,8 @@ class BookingService
                     $slots,
                     'held',
                     $heldUntil->timestamp,
-                    "Slots on {$court->name} are currently held for checkout ({$holdDurationMins}-minute window)."
+                    "Slots on {$court->name} are currently held for checkout ({$holdDurationMins}-minute window).",
+                    $targetVenueId
                 ))->toOthers();
             } catch (\Exception $e) {
                 Log::warning('Reverb broadcast error: ' . $e->getMessage());
@@ -335,7 +358,8 @@ class BookingService
         array $slots,
         array $customerData,
         string $receiptPath,
-        ?int $userId = null
+        ?int $userId = null,
+        ?int $venueId = null
     ): Booking {
         $this->releaseExpiredHolds();
 
@@ -344,6 +368,13 @@ class BookingService
         }
 
         $court = Court::findOrFail($courtId);
+        if (!$court->isBookable()) {
+            throw new \Exception('This court is currently unavailable for booking due to inactive subscription.');
+        }
+
+        $targetVenueId = $venueId ?: ($court->venue_id ?: 1);
+        $venue = Venue::find($targetVenueId);
+        $prefix = $venue->booking_ref_prefix ?? 'PF';
 
         sort($slots);
         $startTime = reset($slots);
@@ -356,14 +387,15 @@ class BookingService
         $ratePerHour = $court->price_per_hour;
         $totalAmount = $ratePerHour * $totalHours;
 
-        $reference = 'PF-' . date('Ymd') . '-' . strtoupper(Str::random(5));
+        $reference = $prefix . '-' . date('Ymd') . '-' . strtoupper(Str::random(5));
 
         return DB::transaction(function () use (
             $reference, $userId, $customerData, $court, $date,
             $startTime, $endTime, $totalHours, $ratePerHour, $totalAmount,
-            $slots, $receiptPath
+            $slots, $receiptPath, $targetVenueId
         ) {
             $booking = Booking::create([
+                'venue_id' => $targetVenueId,
                 'booking_reference' => $reference,
                 'user_id' => $userId,
                 'customer_name' => $customerData['name'],
@@ -387,6 +419,7 @@ class BookingService
 
             foreach ($slots as $time) {
                 BookingSlot::create([
+                    'venue_id' => $targetVenueId,
                     'booking_id' => $booking->id,
                     'court_id' => $court->id,
                     'date' => $date,
@@ -404,7 +437,8 @@ class BookingService
                     $slots,
                     'pending_approval',
                     null,
-                    "Reservation pending owner approval on {$court->name}."
+                    "Reservation pending owner approval on {$court->name}.",
+                    $targetVenueId
                 ))->toOthers();
             } catch (\Exception $e) {
                 Log::warning('Reverb broadcast error: ' . $e->getMessage());
@@ -447,7 +481,8 @@ class BookingService
                 $slotTimes,
                 'confirmed',
                 null,
-                "Booking {$booking->booking_reference} confirmed on {$booking->court->name}!"
+                "Booking {$booking->booking_reference} confirmed on {$booking->court->name}!",
+                $booking->venue_id
             ))->toOthers();
         } catch (\Exception $e) {
             Log::warning('Reverb broadcast error: ' . $e->getMessage());
@@ -487,7 +522,8 @@ class BookingService
                 $slotTimes,
                 'released',
                 null,
-                "Booking rejected; slots on {$booking->court->name} released."
+                "Booking rejected; slots on {$booking->court->name} released.",
+                $booking->venue_id
             ))->toOthers();
         } catch (\Exception $e) {
             Log::warning('Reverb broadcast error: ' . $e->getMessage());
@@ -535,7 +571,8 @@ class BookingService
                 $slotTimes,
                 'released',
                 null,
-                "Hold released on {$booking->court->name}."
+                "Hold released on {$booking->court->name}.",
+                $booking->venue_id
             ));
         } catch (\Exception $e) {
             Log::warning('Reverb broadcast error: ' . $e->getMessage());
@@ -547,7 +584,7 @@ class BookingService
     /**
      * Reserve court manually by Court Owner / Admin (offline / whole-court rental)
      */
-    public function manualReserveCourt(array $data, int $approvedByUserId): Booking
+    public function manualReserveCourt(array $data, int $approvedByUserId, ?int $venueId = null): Booking
     {
         $this->releaseExpiredHolds();
 
@@ -555,6 +592,9 @@ class BookingService
         $date = $data['date'];
         $slots = $data['slots'];
         $court = Court::findOrFail($courtId);
+        $targetVenueId = $venueId ?: ($court->venue_id ?: 1);
+        $venue = Venue::find($targetVenueId);
+        $prefix = $venue->booking_ref_prefix ?? 'PF';
 
         if (empty($slots)) {
             throw new \Exception('Please select at least one timeslot for this reservation.');
@@ -593,13 +633,14 @@ class BookingService
             ? (float) $data['total_amount']
             : ($ratePerHour * $totalHours);
 
-        $reference = 'PF-OWN-' . date('Ymd') . '-' . strtoupper(Str::random(5));
+        $reference = sprintf('%s-OWN-%s-%s', $prefix, date('Ymd'), strtoupper(Str::random(5)));
 
         return DB::transaction(function () use (
             $reference, $data, $court, $date, $startTime, $endTime,
-            $totalHours, $ratePerHour, $totalAmount, $slots, $approvedByUserId
+            $totalHours, $ratePerHour, $totalAmount, $slots, $approvedByUserId, $targetVenueId
         ) {
             $booking = Booking::create([
+                'venue_id' => $targetVenueId,
                 'booking_reference' => $reference,
                 'user_id' => $data['user_id'] ?? null,
                 'customer_name' => $data['customer_name'],
@@ -623,6 +664,7 @@ class BookingService
 
             foreach ($slots as $time) {
                 BookingSlot::create([
+                    'venue_id' => $targetVenueId,
                     'booking_id' => $booking->id,
                     'court_id' => $court->id,
                     'date' => $date,
@@ -640,7 +682,8 @@ class BookingService
                     $slots,
                     'confirmed',
                     $reference,
-                    "Court {$court->name} reserved by Court Owner."
+                    "Court {$court->name} reserved by Court Owner.",
+                    $targetVenueId
                 ));
             } catch (\Throwable $e) {
                 Log::warning('Reverb broadcast error: ' . $e->getMessage());
@@ -689,7 +732,8 @@ class BookingService
                 $slotTimes,
                 'released',
                 null,
-                "Reservation {$booking->booking_reference} on {$booking->court->name} was cancelled by Court Owner."
+                "Reservation {$booking->booking_reference} on {$booking->court->name} was cancelled by Court Owner.",
+                $booking->venue_id
             ));
         } catch (\Throwable $e) {
             Log::warning('Reverb broadcast error: ' . $e->getMessage());

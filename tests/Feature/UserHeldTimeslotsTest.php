@@ -24,7 +24,7 @@ class UserHeldTimeslotsTest extends TestCase
         $this->seed();
 
         $this->owner = User::where('role', 'court_owner')->first();
-        $this->client = User::where('role', 'client')->first();
+        $this->client = User::where('role', 'client')->latest('id')->first();
         $this->court = Court::first();
     }
 

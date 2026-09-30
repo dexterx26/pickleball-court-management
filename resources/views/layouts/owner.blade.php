@@ -140,6 +140,29 @@
                 </a>
             @endif
 
+            <!-- Court Subscriptions Management -->
+            @if(Auth::user()->isOwner() || Auth::user()->isAdmin())
+                <a href="{{ route('owner.subscriptions') }}" class="flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold {{ request()->routeIs('owner.subscriptions*') ? 'bg-cyan-500 text-slate-950 font-bold shadow-md shadow-cyan-500/20' : 'text-theme-body hover:bg-stone-200 dark:hover:bg-stone-800' }} transition-colors">
+                    <i class="fa-solid fa-credit-card w-4 text-center"></i>
+                    <span>Court Subscriptions</span>
+                </a>
+            @endif
+
+            <!-- Platform Superadmin Section -->
+            @if(Auth::user()->isPlatformAdmin() || Auth::user()->isAdmin())
+                <div class="pt-3 pb-1 text-[10px] font-black text-cyan-600 dark:text-cyan-400 uppercase tracking-wider px-3.5">
+                    Platform Superadmin
+                </div>
+                <a href="{{ route('platform.venues') }}" class="flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold {{ request()->routeIs('platform.venues*') ? 'bg-cyan-500 text-slate-950 font-bold shadow-md' : 'text-theme-body hover:bg-stone-200 dark:hover:bg-stone-800' }} transition-colors">
+                    <i class="fa-solid fa-shield-halved w-4 text-center"></i>
+                    <span>Venues Directory</span>
+                </a>
+                <a href="{{ route('platform.subscriptions') }}" class="flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold {{ request()->routeIs('platform.subscriptions*') ? 'bg-cyan-500 text-slate-950 font-bold shadow-md' : 'text-theme-body hover:bg-stone-200 dark:hover:bg-stone-800' }} transition-colors">
+                    <i class="fa-solid fa-coins w-4 text-center"></i>
+                    <span>Platform Billing</span>
+                </a>
+            @endif
+
             <div class="pt-4 border-t border-stone-200 dark:border-stone-800">
                 <a href="{{ route('home') }}" target="_blank" class="flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-medium text-theme-muted hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors">
                     <i class="fa-solid fa-arrow-up-right-from-square w-4 text-center"></i>
