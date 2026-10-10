@@ -29,13 +29,39 @@ if %errorlevel% neq 0 (
     )
 )
 
-:: 2. Auto-detect NPM / Node for Vite
+:: 2. Auto-detect & setup .env
+if not exist "%~dp0.env" (
+    echo [*] .env not found. Creating from .env.dev...
+    if exist "%~dp0.env.dev" (
+        copy /y "%~dp0.env.dev" "%~dp0.env" >nul
+    ) else if exist "%~dp0.env.example" (
+        copy /y "%~dp0.env.example" "%~dp0.env" >nul
+    )
+    call php artisan key:generate
+)
+
+:: 3. Check PHP dependencies (vendor)
+if not exist "%~dp0vendor" (
+    echo [*] Vendor folder missing. Installing Composer dependencies...
+    call composer install
+)
+
+:: 4. Check SQLite database
+if not exist "%~dp0database\database.sqlite" (
+    echo [*] Creating SQLite database and running migrations...
+    type nul > "%~dp0database\database.sqlite"
+    call php artisan migrate --seed --force
+)
+
+:: 5. Auto-detect NPM / Node for Vite
 set "HAS_NPM=0"
 where npm >nul 2>&1
 if %errorlevel% equ 0 (
-    if exist "%~dp0node_modules" (
-        set "HAS_NPM=1"
+    if not exist "%~dp0node_modules" (
+        echo [*] node_modules missing. Installing NPM packages...
+        call npm install
     )
+    set "HAS_NPM=1"
 )
 
 :START_SERVERS
@@ -79,19 +105,21 @@ echo     * Vite HMR Dev Server : http://localhost:5173
 echo.
 echo   [QUICK ACTIONS]
 echo     [O] Open Web App in Default Browser (http://127.0.0.1:8000)
-echo     [A] Open Owner / Admin Portal (http://127.0.0.1:8000/owner/login)
-echo     [T] Open Reservation Tracker (http://127.0.0.1:8000/track)
-echo     [C] Clear Application Caches (artisan optimize:clear)
-echo     [M] Run Database Migrations (artisan migrate)
+echo     [A] Open Login / Admin Portal       (http://127.0.0.1:8000/login)
+echo     [T] Open Reservation Lookup / Track (http://127.0.0.1:8000/lookup)
+echo     [C] Clear Application Caches        (artisan optimize:clear)
+echo     [M] Run Database Migrations         (artisan migrate)
+echo     [S] Seed Database with Sample Data  (artisan db:seed --force)
 echo     [R] Restart All Dev Servers
 echo     [K] Stop All Dev Servers
 echo     [Q] Stop All Dev Servers and Exit
 echo.
 echo ===============================================================================
-choice /c OATCMRKQ /n /m "Select an option [O, A, T, C, M, R, K, Q]: "
-if errorlevel 8 goto ACTION_QUIT
-if errorlevel 7 goto ACTION_STOP
-if errorlevel 6 goto ACTION_RESTART
+choice /c OATCMSRKQ /n /m "Select an option [O, A, T, C, M, S, R, K, Q]: "
+if errorlevel 9 goto ACTION_QUIT
+if errorlevel 8 goto ACTION_STOP
+if errorlevel 7 goto ACTION_RESTART
+if errorlevel 6 goto ACTION_SEED
 if errorlevel 5 goto ACTION_MIGRATE
 if errorlevel 4 goto ACTION_CACHE
 if errorlevel 3 goto ACTION_TRACKER
@@ -104,17 +132,17 @@ start http://127.0.0.1:8000
 goto MENU
 
 :ACTION_ADMIN
-start http://127.0.0.1:8000/owner/login
+start http://127.0.0.1:8000/login
 goto MENU
 
 :ACTION_TRACKER
-start http://127.0.0.1:8000/track
+start http://127.0.0.1:8000/lookup
 goto MENU
 
 :ACTION_CACHE
 echo.
 echo [*] Clearing application caches...
-php artisan optimize:clear
+call php artisan optimize:clear
 echo [OK] Cache cleared!
 ping -n 3 127.0.0.1 >nul
 goto MENU
@@ -122,8 +150,16 @@ goto MENU
 :ACTION_MIGRATE
 echo.
 echo [*] Running migrations...
-php artisan migrate
+call php artisan migrate
 echo [OK] Migrations completed.
+ping -n 3 127.0.0.1 >nul
+goto MENU
+
+:ACTION_SEED
+echo.
+echo [*] Seeding database...
+call php artisan db:seed --force
+echo [OK] Database seeded.
 ping -n 3 127.0.0.1 >nul
 goto MENU
 
